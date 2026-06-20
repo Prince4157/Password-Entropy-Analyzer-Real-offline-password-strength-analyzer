@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Analyze password strength using real cryptographic entropy math and pattern detection. See naive vs effective entropy, crack times across 5 attack vectors, and detailed pattern breakdowns — all computed 100% locally in your browser.">
+  <title>Password Entropy Analyzer — Real Cryptographic Strength Analysis</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='80'>🔐</text></svg>">
+  <script type="importmap">
+  {
+    "imports": {
+      "@zxcvbn-ts/core": "./lib/zxcvbn-core.js",
+      "@zxcvbn-ts/language-common": "./lib/zxcvbn-language-common.js",
+      "@zxcvbn-ts/language-en": "./lib/zxcvbn-language-en.js",
+      "/npm/fastest-levenshtein@1.0.16/+esm": "./lib/fastest-levenshtein.js",
+      "/npm/@zxcvbn-ts/dictionary-compression@3.0.1/decompress/+esm": "./lib/dictionary-compression.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <div class="app-logo" aria-hidden="true">🔐</div>
+        <div>
+          <h1 class="app-title">Password Entropy Analyzer</h1>
+          <p class="app-subtitle">Real cryptographic strength analysis</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="theme-toggle" class="theme-toggle" aria-label="Toggle light/dark mode" title="Toggle theme">
+          <svg id="theme-icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          <svg id="theme-icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Trust Badge -->
+    <div class="trust-badge" role="status">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      <span>Computed 100% locally in your browser — nothing is sent anywhere</span>
+    </div>
+
+    <!-- Password Input -->
+    <section class="password-section">
+      <div class="password-input-wrapper">
+        <input
+          type="password"
+          id="password-input"
+          class="password-input"
+          placeholder="Type or paste a password to analyze…"
+          autocomplete="off"
+          autocapitalize="off"
+          autocorrect="off"
+          spellcheck="false"
+          aria-label="Password to analyze"
+        >
+        <button id="toggle-visibility" class="toggle-visibility" aria-label="Show password" title="Show password">
+          <!-- Eye icon (hidden state) -->
+          <svg id="eye-icon-off" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          <!-- Eye-off icon (visible state) -->
+          <svg id="eye-icon-on" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+        </button>
+      </div>
+
+      <!-- Stats Bar -->
+      <div id="stats-bar" class="stats-bar" style="display: none;">
+        <div class="stat-chip">
+          Length: <span class="stat-value" id="stat-length">0</span>
+        </div>
+        <div class="stat-chip">
+          Pool Size: <span class="stat-value" id="stat-pool">0</span>
+        </div>
+        <div class="stat-chip">
+          Sets: <span class="stat-value" id="stat-sets">—</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Analysis Results (hidden until input) -->
+    <div id="analysis-results" style="display: none;">
+
+      <!-- Entropy Comparison -->
+      <section class="section" id="section-entropy">
+        <div class="section-card">
+          <div class="section-title">Entropy Comparison</div>
+
+          <div class="entropy-comparison">
+            <div class="entropy-card">
+              <div class="entropy-label">Naive Entropy</div>
+              <div class="entropy-value naive" id="naive-entropy">0</div>
+              <div class="entropy-unit">bits</div>
+            </div>
+            <div class="entropy-card">
+              <div class="entropy-label">Effective Entropy</div>
+              <div class="entropy-value effective" id="effective-entropy">0</div>
+              <div class="entropy-unit">bits</div>
+            </div>
+          </div>
+
+          <!-- Gap Visualization -->
+          <div class="entropy-gap">
+            <div class="gap-bar-container">
+              <div class="gap-bar-naive" id="gap-bar-naive" style="width: 0%"></div>
+              <div class="gap-bar-effective" id="gap-bar-effective" style="width: 0%"></div>
+            </div>
+            <div class="gap-label" id="gap-label">—</div>
+          </div>
+
+          <!-- Explanation -->
+          <div class="entropy-explanation" id="entropy-explanation">
+            Enter a password to see how its naive mathematical entropy compares to its real-world effective entropy after accounting for human-predictable patterns.
+          </div>
+        </div>
+      </section>
+
+      <!-- Visual Strength Gauge -->
+      <section class="section" id="section-gauge">
+        <div class="section-card">
+          <div class="section-title">Strength Gauge (Offline Slow Hash Baseline)</div>
+          <div class="strength-gauge-section">
+            <div class="gauge-container">
+              <div class="gauge-track">
+                <div class="gauge-fill" id="gauge-fill" style="width: 0%; background: var(--strength-instant);"></div>
+              </div>
+              <div class="gauge-labels">
+                <div>
+                  <div class="gauge-time-label" id="gauge-time">—</div>
+                  <div class="gauge-time-sublabel">to crack with bcrypt/argon2</div>
+                </div>
+                <div class="gauge-scale-label">instant → centuries+</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Pattern Breakdown -->
+      <section class="section pattern-section" id="section-patterns">
+        <div class="section-header" id="pattern-toggle" role="button" tabindex="0" aria-expanded="false" aria-controls="pattern-list">
+          <div class="section-header-left">
+            <div class="section-title">Pattern Breakdown</div>
+            <span class="pattern-count" id="pattern-count">0 patterns</span>
+          </div>
+          <svg class="collapse-icon" id="collapse-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div class="pattern-list" id="pattern-list" role="region" aria-label="Pattern breakdown details">
+          <!-- Dynamically populated -->
+        </div>
+      </section>
+
+      <!-- Attack Vector Crack-Time Table -->
+      <section class="section" id="section-crack-times">
+        <div class="section-card">
+          <div class="section-title">Crack Time by Attack Vector</div>
+          <div class="crack-time-grid" id="crack-time-grid">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+      </section>
+
+      <!-- Stretch Goals -->
+      <section class="section" id="section-stretch">
+        <div class="stretch-section">
+          <button id="btn-copy-report" class="action-button" title="Copy a text summary of the analysis (password is never included)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Copy Strength Report
+          </button>
+          <button id="btn-hibp-check" class="action-button hibp-btn" title="Check if this password appeared in known data breaches (sends only a SHA-1 prefix, never the full password)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            Check Breach Database
+          </button>
+        </div>
+        <div id="hibp-result" class="hibp-result"></div>
+        <div id="improvement-suggestion" class="improvement-suggestion"></div>
+      </section>
+    </div>
+
+    <!-- Placeholder State -->
+    <div id="placeholder-state" class="placeholder-state">
+      <div class="placeholder-icon">🔑</div>
+      <p class="placeholder-text">Type or paste a password above to see a real-time<br>cryptographic entropy analysis with crack-time estimates.</p>
+    </div>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <p class="footer-text">
+        Built with <a href="https://zxcvbn-ts.github.io/zxcvbn/" target="_blank" rel="noopener">zxcvbn-ts</a> for pattern detection.
+        No data leaves your browser. Read the <a href="README.md" target="_blank">methodology</a> for entropy math and attack model assumptions.
+      </p>
+    </footer>
+  </div>
+
+  <!-- Copy Toast -->
+  <div id="copy-toast" class="copy-toast">Report copied to clipboard!</div>
+
+  <!-- App Script (ES Module) -->
+  <script type="module" src="app.js"></script>
+</body>
+</html>
